@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>BDO — Devouring Calculator</title>
+<style>
+:root{--bg:#0f1115;--panel:#151923;--text:#e6ebf2;--muted:#9aa4b2;--accent:#6aa5ff;--ok:#6ee7b7;--radius:14px}
+*{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial}
+body{margin:0;background:linear-gradient(180deg,#0c0f14,#0f1115);color:var(--text)}
+.wrap{max-width:760px;margin:40px auto;padding:16px;text-align:center}
+h1{font-size:24px;margin-bottom:20px}
+.panel{background:var(--panel);border:1px solid #1f2633;border-radius:var(--radius);padding:20px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.row{display:grid;grid-template-columns:auto 1fr 110px;gap:10px;align-items:center;margin:10px 0}
+label{white-space:nowrap;color:#cbd5e1;font-weight:600}
+input[type="range"]{width:100%}
+input[type="number"]{width:110px;padding:8px;border-radius:10px;border:1px solid #2a3244;background:#0b0f1a;color:var(--text)}
+.section-title{margin-top:10px;font-weight:700;color:var(--accent);text-transform:uppercase;font-size:14px;letter-spacing:0.5px}
+.kpi{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:16px}
+.k{position:relative;background:#0c1221;border:1px solid #1f2a44;border-radius:12px;padding:14px}
+.kv{font-size:26px;font-weight:800}
+.kt{font-size:12px;color:#9aa4b2;display:flex;align-items:center;gap:6px}
+.bar{height:10px;border-radius:99px;background:#10182a;overflow:hidden;margin-top:10px}
+.bar span{display:block;height:100%;background:linear-gradient(90deg,#4f9cff,#6ee7b7);width:0%}
+button{cursor:pointer;background:#0b0f1a;border:1px solid #2b3b59;border-radius:10px;color:var(--text);padding:8px 10px;margin-top:12px}
+.footer{margin-top:14px;color:#9aa4b2;font-size:12px}
+.grid{display:grid;grid-template-columns:1fr;gap:16px}
+.badge{display:inline-block;padding:6px 10px;border-radius:999px;background:#0b0f1a;border:1px solid #2a3244;color:#a6b3c5;font-size:12px}
+.path{margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.chip{padding:6px 10px;border-radius:999px;background:#0b1424;border:1px solid #23304a;font-size:12px;color:#cfe3ff}
+.err{color:#fb7185;font-size:13px;margin-top:6px}
+.info-btn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;border:1px solid #2a3244;background:#0b0f1a;color:#cfe3ff;font-weight:700;font-size:12px;line-height:0;cursor:pointer}
+.popup{position:absolute;right:10px;top:36px;z-index:20;min-width:260px;max-width:320px;background:#0b0f1a;border:1px solid #2a3244;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.4);padding:12px;text-align:left;display:none}
+.popup h4{margin:0 0 6px;font-size:14px}
+.popup p{margin:6px 0;color:#a6b3c5;font-size:12px;line-height:1.35}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BDO — Devouring Calculator</h1>
+  <div class="panel">
+    <div class="grid">
+      <!-- Inputs -->
+      <div>
+        <div class="section-title">Failstacks</div>
+        <div class="row">
+          <label for="startFS">Starting FS (100–299)</label>
+          <input type="range" id="startFS" min="100" max="299" step="1" />
+          <input type="number" id="startFS_n" min="100" max="299" step="1" />
+        </div>
+        <div class="row">
+          <label for="targetFS">Target FS (≥ start, ≤ 299)</label>
+          <input type="range" id="targetFS" min="100" max="299" step="1" />
+          <input type="number" id="targetFS_n" min="100" max="299" step="1" />
+        </div>
+        <div id="err" class="err" role="alert" aria-live="polite"></div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpi">
+        <div class="k">
+          <div class="kt">Items Needed <button class="info-btn" id="info_btn" aria-label="How is it calculated?">?</button></div>
+          <div class="kv" id="items_v">—</div>
+          <div class="bar"><span id="items_bar"></span></div>
+
+          <!-- Info Popup -->
+          <div class="popup" id="info_popup">
+            <h4>How it works</h4>
+            <p><strong>Rule:</strong> each item adds a fixed bonus depending on your current FS range.</p>
+            <p><strong>Ranges sample:</strong> 100–101 ⇒ +26, 102–105 ⇒ +25, …, 299 ⇒ +1.</p>
+            <p><strong>Algorithm:</strong> while <code>current &lt; target</code>, find the matching range and add its bonus. Count how many items were used.</p>
+          </div>
+        </div>
+
+        <div class="k">
+          <div class="kt">Final FS (after jumps)</div>
+          <div class="kv" id="final_v">—</div>
+          <div class="bar"><span id="final_bar"></span></div>
+        </div>
+      </div>
+
+      <!-- Path -->
+      <div>
+        <span class="badge">Progression</span>
+        <div id="path" class="path"></div>
+      </div>
+    </div>
+
+    <button id="reset">Reset</button>
+    <div class="footer">by: JasonREDUX</div>
+  </div>
+</div>
+
+<script>
+/* ---------------------------------------------------------
+ * Failstack Calculator (single file)
+ * - Text/UI in English
+ * - Comments in English
+ * - Fixes:
+ *   1) Clamp overshoot to 299 after each jump.
+ *   2) Make number inputs typeable (don't overwrite while typing).
+ * --------------------------------------------------------- */
+
+/** Mapping of FS ranges to bonus (inclusive). */
+const RANGES = [
+  [100,101,26],[102,105,25],[106,108,24],[109,111,23],[112,115,22],
+  [116,119,21],[120,124,20],[125,129,19],[130,135,18],[136,141,17],
+  [142,148,16],[149,156,15],[157,165,14],[166,175,13],[176,187,12],
+  [188,196,11],[197,206,10],[207,217,9],[218,235,8],[236,254,7],
+  [255,269,6],[270,291,5],[292,296,4],[297,297,3],[298,298,2],[299,299,1],
+];
+
+/** Helpers */
+const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+const q = id => document.getElementById(id);
+
+/** Get bonus for a given FS. */
+function bonusFor(fs){
+  for(const [s,e,b] of RANGES){
+    if(fs>=s && fs<=e) return b;
+  }
+  return 0;
+}
+
+/** Core algorithm with overshoot clamp to 299. */
+function calcItemsNeeded(start, target){
+  if(start < 100 || start > 299) throw new Error("Starting FS must be 100–299.");
+  if(target < 100 || target > 299) throw new Error("Target FS must be 100–299.");
+  if(target <= start) return {items:0, finalFS:start, hops:[start]};
+
+  let current = start;
+  let items = 0;
+  const hops = [current];
+
+  while(current < target){
+    const b = bonusFor(current);
+    if(b <= 0) break; // safety
+    current += b;
+    current = Math.min(current, 299); // clamp overshoot
+    items += 1;
+    hops.push(current);
+    if(items > 1000) break; // safety
+  }
+  return {items, finalFS: current, hops};
+}
+
+/** DOM refs */
+const startFS = q("startFS"), startFS_n = q("startFS_n");
+const targetFS = q("targetFS"), targetFS_n = q("targetFS_n");
+const items_v = q("items_v"), items_bar = q("items_bar");
+const final_v = q("final_v"), final_bar = q("final_bar");
+const pathBox = q("path"), err = q("err");
+const resetBtn = q("reset");
+const infoBtn = q("info_btn"), infoPopup = q("info_popup");
+
+/** Bind a slider/number pair without fighting the user's typing.
+ *  - Slider 'input' -> update number immediately.
+ *  - Number 'change' (on blur/enter) -> clamp and update slider.
+ *  - Number 'input' -> do not push back to slider; let user type freely.
+ */
+function bindPair(slider, number, min, max, def){
+  slider.min=min; slider.max=max; slider.step=1; slider.value=def;
+  number.min=min; number.max=max; number.step=1; number.value=def;
+
+  slider.addEventListener("input", ()=>{
+    number.value = slider.value;
+    compute();
+  });
+
+  number.addEventListener("change", ()=>{
+    const v = clamp(parseInt(number.value||def,10), min, max);
+    number.value = v;
+    slider.value = v;
+    compute();
+  });
+
+  number.addEventListener("input", ()=>{ /* allow typing without resetting */ });
+}
+
+/** Init defaults (example values). */
+bindPair(startFS, startFS_n, 100, 299, 100);
+bindPair(targetFS, targetFS_n, 100, 299, 299);
+
+/** Reset */
+resetBtn.addEventListener("click", ()=>{
+  startFS.value = startFS_n.value = 100;
+  targetFS.value = targetFS_n.value = 299;
+  compute();
+});
+
+/** Info popup toggle */
+document.addEventListener("click",(e)=>{
+  if(e.target===infoBtn){
+    infoPopup.style.display = (infoPopup.style.display==="block"?"none":"block");
+  }else if(!infoPopup.contains(e.target)){
+    infoPopup.style.display = "none";
+  }
+});
+document.addEventListener("keydown",(e)=>{
+  if(e.key==="Escape") infoPopup.style.display = "none";
+});
+
+/** Render progression chips (clamped to 299 for display). */
+function renderPath(hops){
+  pathBox.innerHTML = "";
+  hops.forEach((v,idx)=>{
+    const shown = Math.min(v,299);
+    const d = document.createElement("span");
+    d.className = "chip";
+    d.textContent = idx===0 ? `Start ${shown}` : `→ ${shown}`;
+    pathBox.appendChild(d);
+  });
+}
+
+/** Compute + render */
+function compute(){
+  err.textContent = "";
+  const s = parseInt(startFS.value,10);
+  const t = parseInt(targetFS.value,10);
+
+  if(t < s){
+    err.textContent = "Target FS must be greater than or equal to Starting FS.";
+    items_v.textContent = "—"; final_v.textContent = "—";
+    items_bar.style.width = "0%"; final_bar.style.width = "0%";
+    pathBox.innerHTML = "";
+    return;
+  }
+
+  try{
+    const {items, finalFS, hops} = calcItemsNeeded(s, t);
+    items_v.textContent = String(items);
+    final_v.textContent = String(Math.min(finalFS,299));
+
+    // Visual bars: soft scales (30 items / 200 FS delta)
+    items_bar.style.width = clamp((items/30)*100, 0, 100) + "%";
+    const delta = Math.min(finalFS,299) - s;
+    final_bar.style.width = clamp((delta/200)*100, 0, 100) + "%";
+
+    renderPath(hops);
+  }catch(e){
+    err.textContent = e.message || "Error.";
+    items_v.textContent = "—"; final_v.textContent = "—";
+    items_bar.style.width = "0%"; final_bar.style.width = "0%";
+    pathBox.innerHTML = "";
+  }
+}
+
+// First paint
+compute();
+</script>
+</body>
+</html>
